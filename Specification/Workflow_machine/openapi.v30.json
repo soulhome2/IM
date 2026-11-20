@@ -2936,8 +2936,6 @@
                     "bytes": 2147483648,
                     "growthDayBytes": 31457280,
                     "growthWeekBytes": 209715200,
-                    "diskFreeBytes": 53687091200,
-                    "daysLeft": 1792,
                     "searchIndex": "ready",
                     "parts": [
                       {
@@ -13384,8 +13382,6 @@
             "bytes": 2147483648,
             "growthDayBytes": 31457280,
             "growthWeekBytes": 209715200,
-            "diskFreeBytes": 53687091200,
-            "daysLeft": 1792,
             "searchIndex": "ready",
             "parts": [
               {
@@ -13503,12 +13499,10 @@
           "bytes",
           "growthDayBytes",
           "growthWeekBytes",
-          "diskFreeBytes",
-          "daysLeft",
           "searchIndex",
           "parts"
         ],
-        "description": "База и место на диске. Общие для сервера, всех организаций: по организации размер не делится. Клиент подписывает блок «общий для сервера»",
+        "description": "База. Общие для сервера, всех организаций: по организации размер не делится. Клиент подписывает блок «общий для сервера»",
         "properties": {
           "scope": {
             "type": "string",
@@ -13533,20 +13527,6 @@
             "type": "integer",
             "format": "int64",
             "description": "Прирост за неделю, так же по снимку недельной давности",
-            "nullable": true
-          },
-          "diskFreeBytes": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0,
-            "description": "Свободно на диске, где лежит база; сервер МИ этого не знает (база на другой машине) — null",
-            "nullable": true
-          },
-          "daysLeft": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0,
-            "description": "Хватит на столько дней: `diskFreeBytes / (growthWeekBytes / 7)`, вниз до целого. Нет свободного места или прироста, прирост не больше нуля — null",
             "nullable": true
           },
           "searchIndex": {

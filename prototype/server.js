@@ -2402,7 +2402,7 @@
       const perMinute = Array.from({ length: 60 }, (_, i) => intakeLog.filter((t) => t > at - (60 - i) * MIN && t <= at - (59 - i) * MIN).length);
       const minIso = (list) => (list.length ? iso(Math.min(...list)) : null);
       const MB = 1048576;
-      // Демо: размер базы растёт с числом инцидентов стенда; диск и прирост — правдоподобные числа
+      // Демо: размер базы растёт с числом инцидентов стенда; прирост — правдоподобное число
       const parts = [
         ["events", 180 * MB + events.length * 2048],
         ["incidents", 95 * MB + events.length * 6144],
@@ -2413,7 +2413,6 @@
       const named = parts.reduce((s, x) => s + x.bytes, 0);
       const other = 48 * MB;
       const growthWeek = 210 * MB;
-      const free = 50 * 1024 * MB;
       const audit = auditActions.map((r) => Date.parse(r.at)).concat(settingsAudit.map((r) => Date.parse(r.at)));
       const lastPurgeAt = at - 20 * MIN;
       return {
@@ -2425,8 +2424,6 @@
             bytes: named + other,
             growthDayBytes: 30 * MB,
             growthWeekBytes: growthWeek,
-            diskFreeBytes: free,
-            daysLeft: Math.floor(free / (growthWeek / 7)),
             searchIndex: "ready",
             parts: parts.sort((a, b) => b.bytes - a.bytes).concat({ name: "other", bytes: other }),
           },

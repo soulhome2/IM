@@ -7208,12 +7208,10 @@
     const sv = s.server;
     const perHour = sv.eventsPerMinute.reduce((x, y) => x + y, 0);
     const body = [
-      head("database", "База", "Общий для сервера: размер и диск — всех организаций"),
+      head("database", "База", "Общий для сервера: размер — всех организаций"),
       row("Размер базы", bytes(db.bytes), "database"),
       row("Прирост за сутки", bytes(db.growthDayBytes), "database"),
       row("Прирост за неделю", bytes(db.growthWeekBytes), "database"),
-      row("Свободно на диске", bytes(db.diskFreeBytes), "database"),
-      row("Хватит при текущем приросте", db.daysLeft == null ? te("нет данных") : te("на {n} дн.", { n: db.daysLeft }), "database"),
       `<tr data-status-row="searchIndex"><td>${te("Индекс поиска (pg_trgm)")}</td><td>${te(SEARCH_INDEX[db.searchIndex] || SEARCH_INDEX.unknown)}${db.searchIndex === "no_extension" ? `<span class="what">${te("Суперпользователь базы выполняет CREATE EXTENSION pg_trgm, потом сервер МИ перезапускают")}</span>` : ""}${mark("database")}</td></tr>`,
       ...db.parts.map((x) => row(PART[x.name] || x.name, bytes(x.bytes), "database")),
       head("retention", "Хранение", "Очистка по сроку хранения — раз в час, только своей организации"),

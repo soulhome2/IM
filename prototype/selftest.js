@@ -2493,6 +2493,9 @@
       const blocks = [...$("adminTable").querySelectorAll("[data-status-block]")].map((r) => r.dataset.statusBlock).join();
       expect(blocks === "database,retention,server", `блоки: ${blocks}`);
       expect(/общий для сервера/i.test($("adminTable").textContent), "размер базы не помечен «общий для сервера»");
+      expect(!/Свободно на диске|Хватит при текущем приросте/.test($("adminTable").textContent), "в «Состоянии системы» остались свободное место на диске или прогноз «хватит на N дней»: база может быть на другой площадке");
+      const sysStatus = await window.IM_SELFTEST_API.get("/operator/admin/system-status");
+      expect(!("diskFreeBytes" in sysStatus.database) && !("daysLeft" in sysStatus.database), "в ответе состояния системы остались diskFreeBytes или daysLeft");
       const idx = $("adminTable").querySelector('[data-status-row="searchIndex"]');
       expect(idx && /Индекс поиска \(pg_trgm\)/.test(idx.textContent) && /используется/.test(idx.textContent), "нет строки «Индекс поиска (pg_trgm)» со значением «используется»");
       const refresh = $("adminNote").querySelector("[data-admin-refresh]");
