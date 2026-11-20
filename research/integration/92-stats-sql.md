@@ -16,7 +16,7 @@
 - рабочее место `~/Work/incident-manager` — не меняется (ответ тот же);
 - стенд — `~/Work/stand/load/plan90G/` (`restore_dump.sh`, `run_stats.sh`, `stats_probe.py`, `run_G.sh`, `sumrun.py`).
 
-Ветка везде `feature/im_operator`. Карта кода — `.superpowers/sdd/92-map.md` (в git не идёт).
+Ветка везде `feature/im_operator`. Карта кода — `.superpowers/sdd/92-stats-sql/92-map.md` (в git не идёт).
 
 ## Что не так
 
