@@ -2126,6 +2126,10 @@
         (p, q, body) => {
           const ev = find(p.incidentGuid);
           if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+          // Что видел оператор (§14.1, RULE-147): владельца — до проверки права, как у ответа на шаг. Не прислал — 428;
+          // перехватили, передали — 412 с карточкой «Инцидент уже ведёт …», а не 403 «на просмотр»
+          if (!body || body.expectedOwner == null) return expectedRequired();
+          if (String(body.expectedOwner) !== (ev.owner || "")) return changedProblem(ev, "addressee");
           if (!engine.canEditScenario(ev)) return problem(403, "PERMISSION_DENIED", ["workflow.error.read_only"]);
           // Показать можно только шаг пути: дальше текущего не пройти, не ответив на него
           if (!body || !pathOf(ev).includes(body.stepId)) return problem(409, "STEP_NOT_ON_PATH", ["workflow.error.scenario.not_on_path"]);

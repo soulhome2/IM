@@ -226,6 +226,21 @@
     assert.eq(stale.body.current.result.state[stepId].seq, 2, "в current — актуальный ответ");
   });
 
+  test("Курсор сценария (§14.1, RULE-147): сверяет владельца, которого видел оператор; нет — 428, перехватили — 412 «Уже ведёт …»", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    const stepId = (await env.card(inc.guid)).scenario.result.currentStepId;
+    assert.status(await env.answer(inc.guid, { stepId, value: ["confirmed"] }), 200, null, "ответ");
+    const url = `/operator/incidents/${enc(inc.guid)}/scenario/cursor`;
+    assert.status(await env.call("PUT", url, { stepId }), 428, "PRECONDITION_REQUIRED", "курсор без expectedOwner");
+    assert.status(await env.call("PUT", url, { stepId, expectedOwner: ME }), 200, null, "курсор назад — владелец тот же");
+    assert.status(await env.call("POST", `/test/operators/petrova/incidents/${enc(inc.guid)}/transitions/takeover`, { formValues: { comment: "тест" }, surface: "card" }), 200, null, "Петрова перехватывает");
+    const taken = await env.call("PUT", url, { stepId, expectedOwner: ME });
+    assert.status(taken, 412, "INCIDENT_CHANGED", "курсор после перехвата");
+    assert.eq([taken.body.messageKey, taken.body.current && taken.body.current.owner && taken.body.current.owner.id], ["workflow.error.changed.taken", "petrova"], "текст и карточка — у кого инцидент");
+  });
+
   test("Ответ на шаг закрытого коллегой — 412, changed: state, как у перехода: закрытый — всегда состояние (§14.1, RULE-142, BUG-125)", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
@@ -5145,13 +5160,13 @@
     await env.act(inc.guid, "claim", {}, "queue");
     const card = await env.card(inc.guid);
     assert.eq(card.scenario.path, ["visual"], "путь — начальный шаг");
-    const jump = await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: "kind" });
+    const jump = await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: "kind", expectedOwner: ME });
     assert.status(jump, 409, "STEP_NOT_ON_PATH", "курсор дальше текущего шага");
     const saved = await env.answer(inc.guid, { stepId: "visual", value: ["confirmed"] });
     assert.status(saved, 200, null, "ответ на шаг");
     assert.eq(saved.body.progress.filled, card.scenario.progress.filled + 1, "прогресс");
     assert.eq([saved.body.path, saved.body.cursorStepId], [["visual", "verdict"], "verdict"], "путь и курсор — следующий шаг");
-    const back = await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: "visual" });
+    const back = await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: "visual", expectedOwner: ME });
     assert.status(back, 200, null, "курсор назад по пути");
     assert.eq(back.body.cursorStepId, "visual");
     assert.status(await env.answer(inc.guid, { stepId: "verdict", value: "real" }), 200, null, "ответ «Реальная»");

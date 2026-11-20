@@ -1854,9 +1854,14 @@
     // Ушли с шага без «Далее» — его черновик не сохранён и сбрасывается: в поле всегда записанный ответ (BUG-70)
     state.drafts.delete(draftKey(ev, path[cursorOf(ev)]));
     try {
-      ev.scenario = await api.put(`${incPath(ev.guid)}/scenario/cursor`, { stepId: path[index] });
+      // Владелец с карточки (§14.1, RULE-147): перехватили — сервер ответит 412 «Уже взял …», как ответу на шаг
+      ev.scenario = await api.put(`${incPath(ev.guid)}/scenario/cursor`, { stepId: path[index], expectedOwner: (ev.owner && ev.owner.id) || "" });
     } catch (err) {
-      toast(problemText(err), "error");
+      const late = lateText("cursor", err, store.session && store.session.operator.guid);
+      if (late) toast(late, "late");
+      else toast(problemText(err), "error");
+      // Карточка заново: у перехваченного — на просмотр, у нового владельца
+      await loadCard();
     }
     renderScenario();
     renderStatus();

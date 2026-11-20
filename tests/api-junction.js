@@ -101,7 +101,7 @@
     assert.status(claimed, 200, null, "взять");
     assert.eq((await scenarioOf(env, inc.guid)).cursorStepId, "visual", "после «Взять»");
     await answerOk(env, inc.guid, "visual", ["confirmed"]);
-    assert.status(await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: "visual" }), 200, null, "курсор назад");
+    assert.status(await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: "visual", expectedOwner: ME }), 200, null, "курсор назад");
     assert.status(await env.act(inc.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }), 200, null, "закрыть");
     const closed = await env.card(inc.guid);
     assert.ok(closed.readOnly, "закрытый — на просмотр");

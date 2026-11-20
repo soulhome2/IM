@@ -130,6 +130,9 @@ MUTATIONS = [
     ("answer-expected-required-skipped", "server.js", "if (b.expectedOwner == null || !(\"seenAnswer\" in b)) return expectedRequired();", "", "api"),
     # RULE-146: номер ответа не растёт — переответы на одних часах неразличимы
     ("answer-seq-frozen", "scenario.js", "    const seq = nextSeq(r);\n", "    const seq = 1;\n", "api"),
+    # RULE-147: курсор не сверяет, что видел оператор
+    ("cursor-owner-unchecked", "server.js", "if (String(body.expectedOwner) !== (ev.owner || \"\")) return changedProblem(ev, \"addressee\");", "", "api"),
+    ("cursor-expected-required-skipped", "server.js", "if (!body || body.expectedOwner == null) return expectedRequired();", "", "api"),
     ("etag-missing", "server.js", "{ status: 200, body: card(ev), headers: { ETag: etag(ev), \"Cache-Control\": \"no-store\" } }", "{ status: 200, body: card(ev), headers: { \"Cache-Control\": \"no-store\" } }", "api"),
     ("targets-include-self", "server.js", "const list = field ? field.options : targets().filter((o) => !engine.isSelf(o.id));", "const list = field ? field.options : targets();", "api"),
     ("targets-ignore-form", "server.js", "const list = field ? field.options : targets().filter((o) => !engine.isSelf(o.id));", "const list = targets().filter((o) => !engine.isSelf(o.id));", "api"),

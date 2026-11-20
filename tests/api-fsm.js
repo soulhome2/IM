@@ -199,7 +199,7 @@
       const first = (await env.call("GET", `/operator/incidents/${enc(inc.guid)}/scenario`)).body.result.currentStepId;
       assert.status(await env.answerCurrent(inc.guid), 200, null, "ответ на шаг 1");
       const second = (await env.call("GET", `/operator/incidents/${enc(inc.guid)}/scenario`)).body.result.currentStepId;
-      assert.status(await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: first }), 200, null, "курсор на шаг 1");
+      assert.status(await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: first, expectedOwner: ME }), 200, null, "курсор на шаг 1");
       const expired = firedFor(await env.advance(untilDue(env, claimed.body.incident)), inc.guid);
       assert.ok(expired.some((t) => t.startsWith("resolution_")), `норматив закрытия истёк: ${expired}`);
       await c.run(env, inc.guid);

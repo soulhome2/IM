@@ -5148,6 +5148,62 @@
       }
     });
 
+    await step("Опоздал с «Назад» по шагам (§14.1, §22.6, RULE-147): коллега перехватил, пока карточка не обновилась, — курсор не ставится, мягкое «Уже взял <имя>», а не «на просмотр»", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      await standReset({ fixture: "demo" });
+      await wait(100);
+      if (mode() === "work") await click($("backToQueue"));
+      await setFilter("open");
+      const get = stand.get;
+      let release = () => {};
+      const hold = () => {
+        const gate = new Promise((resolve) => (release = resolve));
+        stand.get = (path, params) => gate.then(() => get(path, params));
+      };
+      const free = async () => {
+        stand.get = get;
+        release();
+        await wait(100);
+      };
+      const lastToast = () => $("toasts").lastElementChild;
+      const petrova = (g, tr, formValues) => stand.raw("POST", `/test/operators/petrova/incidents/${encodeURIComponent(g)}/transitions/${tr}`, { formValues: formValues || {}, surface: "card" });
+      try {
+        const busy = (window.IM_FIXTURE.incidents.find((i) => i.number === "INC-1846") || {}).guid;
+        expect((await petrova(busy, "release", { comment: "back" })).status === 200, "Петрова не вернула INC-1846");
+        await wait(100);
+        // Беру новый со сценарием и отвечаю на первый шаг: карточка на втором, «Назад» доступна
+        let g = null;
+        for (const b of [...$("eventsList").querySelectorAll('[data-do="claim"]')].filter((x) => !off(x))) {
+          const id = b.dataset.ev;
+          await click(button($("eventsList"), "claim", id));
+          await answerCurrentStep();
+          if (mode() === "work" && $("stepNext") && !off($("stepNext"))) await click($("stepNext"));
+          if (mode() === "work" && $("stepBack") && !off($("stepBack"))) {
+            g = id;
+            break;
+          }
+          if (mode() === "work") await click($("backToQueue"));
+        }
+        expect(g, "не нашлось нового инцидента со сценарием, где доступна «Назад»");
+        hold();
+        const took = await petrova(g, "takeover");
+        expect(took.status === 200, `Петрова не перехватила: ${took.status} ${(took.body && (took.body.message || took.body.code)) || ""}`);
+        await wait(100);
+        expect($("stepBack") && !off($("stepBack")), "карточка обновилась раньше нажатия");
+        await click($("stepBack"));
+        const late = lastToast();
+        const text = (late && late.textContent) || "";
+        expect(/Уже взял Петрова/.test(text), `опоздал с «Назад»: «${text}»`);
+        expect(late.dataset.kind === "late", `уведомление «${text}» — ${late.dataset.kind}, а не мягкое «опоздал»`);
+        return text;
+      } finally {
+        if (stand.get !== get) await free();
+        if (mode() === "work") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(100);
+      }
+    });
+
     await step("«Передать», когда передать некому, — бледная, по нажатию причина (BUG-85)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       // Всем коллегам — «Оператор ТЦ», в группах никого: у инцидента вне ТЦ принять некому
