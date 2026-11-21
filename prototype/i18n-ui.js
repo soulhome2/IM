@@ -192,6 +192,8 @@ window.IM_DICT_UI = {
     "Версия машины": "Machine version",
     "Идут окна плановых работ": "Maintenance windows in progress",
     "Открыть окна": "Open windows",
+    "Расхождений копии с базой": "Copy mismatches with the database",
+    "Сервер держит живые инциденты в памяти и раз в минуту сверяет с базой; расхождение перечитывает сам. Счёт с запуска этого экземпляра сервера": "The server keeps live incidents in memory and checks them against the database every minute; it re-reads a mismatch itself. Counted since this server instance started",
     "Обновлено": "Updated",
     "Что": "What",
     "События": "Events",

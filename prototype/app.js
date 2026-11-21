@@ -7226,6 +7226,7 @@
       row("Версия сервера", asData(sv.serverVersion), "server.serverVersion"),
       row("Версия машины", String(sv.workflowVersion), "server.workflowVersion"),
       row("Идут окна плановых работ", `${sv.maintenanceActive} <button type="button" class="btn ghost small" data-admin-goto="maintenance">${te("Открыть окна")}</button>`, "server.maintenanceActive"),
+      row("Расхождений копии с базой", String(sv.liveSliceMismatches), "server.liveSliceMismatches", "Сервер держит живые инциденты в памяти и раз в минуту сверяет с базой; расхождение перечитывает сам. Счёт с запуска этого экземпляра сервера"),
       row("Обновлено", when(s.at)),
     ].join("");
     return `<thead><tr><th>${te("Что")}</th><th>${te("Сейчас")}</th></tr></thead><tbody>${body}</tbody>`;

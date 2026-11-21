@@ -2498,6 +2498,8 @@
       expect(!("diskFreeBytes" in sysStatus.database) && !("daysLeft" in sysStatus.database), "в ответе состояния системы остались diskFreeBytes или daysLeft");
       const idx = $("adminTable").querySelector('[data-status-row="searchIndex"]');
       expect(idx && /Индекс поиска \(pg_trgm\)/.test(idx.textContent) && /используется/.test(idx.textContent), "нет строки «Индекс поиска (pg_trgm)» со значением «используется»");
+      const mismatches = [...$("adminTable").querySelectorAll("tr")].find((tr) => /^Расхождений копии с базой/.test(tr.cells[0]?.textContent || ""));
+      expect(sysStatus.server.liveSliceMismatches === 0 && mismatches && /^0/.test(mismatches.cells[1].textContent), "в «Работе сервера» нет строки «Расхождений копии с базой» со значением 0");
       const refresh = $("adminNote").querySelector("[data-admin-refresh]");
       expect(refresh, "нет кнопки «Обновить»");
       await click(refresh);

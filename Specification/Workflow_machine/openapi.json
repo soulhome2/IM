@@ -3066,7 +3066,8 @@
                     "operatorsOnline": 4,
                     "serverVersion": "1.8.2",
                     "workflowVersion": 4,
-                    "maintenanceActive": 1
+                    "maintenanceActive": 1,
+                    "liveSliceMismatches": 0
                   }
                 }
               }
@@ -13858,7 +13859,8 @@
             "operatorsOnline": 4,
             "serverVersion": "1.8.2",
             "workflowVersion": 4,
-            "maintenanceActive": 1
+            "maintenanceActive": 1,
+            "liveSliceMismatches": 0
           }
         }
       },
@@ -14013,7 +14015,8 @@
           "operatorsOnline",
           "serverVersion",
           "workflowVersion",
-          "maintenanceActive"
+          "maintenanceActive",
+          "liveSliceMismatches"
         ],
         "description": "Работа сервера для своей организации",
         "properties": {
@@ -14045,6 +14048,11 @@
             "type": "integer",
             "minimum": 0,
             "description": "Идущих сейчас окон плановых работ (§14.12); список — `GET /operator/maintenance-windows`"
+          },
+          "liveSliceMismatches": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Расхождений копии живых инцидентов в памяти сервера с базой, найденных фоновой сверкой с запуска процесса (§20). Счёт процесса, ответившего на запрос: при нескольких экземплярах сервера у каждого свой. Больше нуля — запись прошла в базу мимо ленты; копия при этом перечитана сама"
           }
         }
       },

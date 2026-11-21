@@ -2440,6 +2440,7 @@
             serverVersion: "prototype",
             workflowVersion: W.schema.version,
             maintenanceActive: MAINT.filter((w) => windowStatus(w) === "active").length,
+            liveSliceMismatches: 0,
           },
           demoFields: ["database", "retention.lastPurge", "retention.nextPurgeAt"],
         },
