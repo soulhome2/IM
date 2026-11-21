@@ -1,0 +1,168 @@
+# План 98. Координация узлов за интерфейсами: замки, будильник ленты, лидер
+
+> **Для агентов-исполнителей:** обязательный навык — superpowers:subagent-driven-development (рекомендуется) или superpowers:executing-plans. Шаги — чекбоксы `- [ ]`. Сервер — по superpowers:test-driven-development: сначала тест, он падает, потом код. Пункт из таблицы решений — в работу, только когда заполнено «Решение»; чего в плане нет — не придумывать, а остановиться и спросить.
+
+Статус: **готов к работе** (2026-11-21). Все решения приняты 2026-11-21.
+
+**Цель:** всё, чем узлы сервера МИ договариваются между собой мимо обычного SQL, — замки, уведомления ленты и (новое) лидер — живёт в одном пакете `service/coord` за интерфейсами. В логике нет ни одного `pg_advisory_*`, `pg_notify` и `LISTEN`. Поведение не меняется.
+
+**Зачем, даже без плана [99](99-two-instances.md):**
+- ключи замков — в одном списке с тестом на пересечение; сейчас классы `2085`, `2185`–`2189`, `hashtext('im-backup:'…)`, `0x494d5f7472676d` и два хеша без класса разбросаны по восьми файлам;
+- хаб ленты и сборку индексов можно проверять без базы;
+- план 99 (лидер планировщика, будильник опроса агента) строится на готовых интерфейсах и не добавляет новых прямых вызовов;
+- замена координатора — внешний (Consul, Redis, NATS) или другая СУБД (`sp_getapplock` в MS SQL) — это вторая реализация интерфейсов, а не правка логики.
+
+**Чего план не делает:** не прячет за интерфейс весь слой хранения и SQL. Диалект PostgreSQL (`ON CONFLICT`, `FOR SHARE`, `jsonb`, `pg_trgm`, массивы, миграции) остаётся в `service/storing`: интерфейс без второй реализации обещал бы поведение PostgreSQL и всё равно поменялся бы при переходе. Порядок ленты (таблица `stream_events` и замок заказчика) остаётся в базе: это outbox, он должен фиксироваться в одной транзакции с данными (разбор — в обсуждении 2026-11-21, кратко в ADR задачи 6).
+
+**Откуда:** обсуждение плана 99 (2026-11-21): «вся координация — на PostgreSQL, не завязаться ли на него намертво».
+
+## Что сейчас
+
+Замки (сервер `~/Work/incident-manager-server`, ветка `feature/im_operator`, пути от `internal/im/`):
+
+| № | Замок | Где | Вид | Ключ |
+|---|---|---|---|---|
+| З1 | лента заказчика | `service/storing/stream_queries.go:54` (`lockStreamSQL`, вместе с `pg_notify`) | до конца транзакции | `(2085, hashtext(customer))` |
+| З2 | приоритеты | `service/storing/priority_queries.go:110` | до конца транзакции | `(2185, hashtext(customer))` |
+| З3 | ссылки помощи | `service/storing/reference_queries.go:388` | до конца транзакции | `(2186, hashtext(customer))` |
+| З4 | дежурные группы | `service/storing/reference_queries.go:461` | до конца транзакции | `(2187, hashtext(customer))` |
+| З5 | настройки поста | `service/storing/workflow_settings_queries.go:117` | до конца транзакции | `(2188, hashtext(customer))` |
+| З6 | приём событий | `service/storing/event_queries.go:22,24`; берут `service/reset/reset.go:122`, `service/backup/apply.go:40` (исключительный), `event_queries.go:32`, `stand/intake.go:194` (общий) | до конца транзакции, исключительный и **общий** | `(2189, hashtext(customer))` |
+| З7 | сброс и восстановление | `service/reset/reset.go:114` (**попытка**, занято — `ErrBusy`), `service/backup/apply.go:34` (ждёт) | до конца транзакции | `hashtext('im-backup:' \|\| customer)` — одно число, без класса |
+| З8 | объект настроек (журнал) | `service/storing/settings_audit_queries.go:54` | до конца транзакции | `(hashtext(customer:type), hashtext(id))` — **класс — хеш**, устроен иначе, чем остальные (совпасть с 2085–2189 может только при совпадении обеих половин — практически никогда) |
+| З9 | сборка индексов поиска | `service/storing/search_indexes.go:166,186` | **на сессию**, попытка раз в 500 мс, своё соединение | `0x494d5f7472676d` — одно число |
+| З10 | свёртка счётчиков закрытых | SQL-функция `queue_closed_compact()` миграции `056_queue_closed_counts.sql` (зовёт планировщик через `CompactClosedCounts`) | до конца транзакции, **попытка**: занято — выходит | `hashtext('queue_closed_compact')` — одно число, **в SQL, не в Go** |
+
+Уведомления: `pg_notify('im_stream', customer)` — в `lockStreamSQL` (З1, один запрос, Н-13 плана 85); `LISTEN im_stream` и приём — `service/stream/hub.go` (`connect`, `receive`, тип `listenConn` с `*pgconn.Notification`). Лидера нет (план 99, задача 4).
+
+## Решения
+
+| № | Вопрос | Варианты | Рекомендация | Решение |
+|---|---|---|---|---|
+| 1 | Где пакет | а) `internal/im/service/coord` — интерфейсы и ключи, `coord/pgcoord` — PostgreSQL, `coord/memcoord` — в памяти; б) внутри `service/storing` | а: логика (`reset`, `backup`, `stream`, планировщик) зависит от `coord`, а не от `storing` | **а** (2026-11-21). Пакет `internal/im/service/coord` — интерфейсы и ключи; `coord/pgcoord` — PostgreSQL; `coord/memcoord` — в памяти. `storing.Store` получает `coord.Locker` при создании (`appservice.go`), его методы `Lock…` остаются и вызывают `Locker`; `reset`, `backup`, `stand` берут `Locker` напрямую |
+| 2 | Замок и уведомление ленты (З1) | а) оставить одним запросом внутри `stream.Store` (`AppendStreamEvents`): `stream.Store` уже интерфейс, его реализация на PostgreSQL сама берёт замок и шлёт уведомление; ключ З1 — в общем списке `coord`, только для теста на пересечение; б) через `Locker.Lock` + `Notifier.Notify` — два запроса | а: лента пишется на каждом переходе, лишний запрос — на каждом переходе; замок и уведомление одним запросом сделаны намеренно (Н-13) | **а** (2026-11-21). Замок и уведомление ленты остаются одним запросом в реализации `stream.Store` на PostgreSQL; класс 2085 — константа `coord.ClassStream`, запрос собирается из неё. Причина: замок ленты общий для всех записей заказчика, лишний запрос под ним снижает пропускную способность приёма (Н-13, план 85). Внешний будильник (Redis, NATS) — вместе с реализацией `stream.Store`: он отправляет после фиксации, не в транзакции |
+| 3 | Ключи З7 и З8 | а) перевести в вид «класс + хеш»: З7 — класс 2190, З8 — класс 2191 с `hashtext(customer:type:id)`; б) оставить как есть отдельными видами ключа | а: один вид ключа, классы не пересекаются по построению. Цена: в З8 вместо двух хешей один — случайные совпадения двух объектов чаще (лишнее ожидание, не ошибка). Узлы старой и новой версии при выкатке берут разные ключи З7 и З8 — допустимо, пока сервер в одном экземпляре | **а** (2026-11-21). З7 — `(2190, hashtext(customer))`, З8 — `(2191, hashtext(customer:type:id))`; у `Locker` один вид ключа `Key{Class, Name}`. Совпадение хешей двух объектов в З8 даёт только ожидание при одновременной правке. Во время выкатки узлы старой и новой версии берут разные ключи З7: сброс и восстановление в это время не делать — правило в ADR-008 |
+| 4 | Ключ З9 | а) оставить числом `0x494d5f7472676d`; б) перевести в класс | а: старая и новая версия при выкатке должны ждать один и тот же замок сборки, иначе две сборки `CONCURRENTLY` подряд ждут друг друга | **б** (2026-11-21; рекомендация пересмотрена после разбора сборки). З9 — `(2192, hashtext('search-indexes'))`; у `Holder` тот же вид ключа `Key{Class, Name}`, что у `Locker`. Узлы старой и новой версии берут разные ключи сборки: выкатывать план 98, когда «Состояние системы» показывает индексы поиска `ready` (или останавливать все узлы разом) — правило в ADR-008. Иначе узел новой версии может снести неисправный индекс, который строит старый |
+| 5 | Лидер в этом плане | а) интерфейс `Leader` и реализация на PostgreSQL поверх замка на сессию (как З9), с тестом, но без подключения к планировщику (это задача 4 плана 99); б) оставить целиком плану 99 | а: тот же механизм, что З9, — делается один раз, рядом | **а** (2026-11-21). Интерфейс `Leader` и реализация на PostgreSQL — `pg_try_advisory_lock(2193, hashtext(роль))` на своём соединении с проверкой живости на каждом `Lead`; реализация в памяти — тоже; тесты: один лидер из двух, переход после `Resign` и после обрыва, потеря соединения даёт `false`. К планировщику и старту сервера не подключать — задача 4 плана 99. `NewLeader` не берёт соединение и не запускает горутин: всё — при первом `Lead`. Окно «два лидера» между проверкой и тактом не закрывается: двойной такт безопасен (замки строк, условие под замком), даёт только лишние ожидания |
+| 6 | Реализация в памяти | а) только для `Listener`, замка на сессию и `Leader`; замки до конца транзакции — только на PostgreSQL; б) всё, с эмуляцией конца транзакции; в) никакой | а: замок «до конца транзакции» в памяти требует крючка на фиксацию и откат каждой транзакции — сложно и проверяет не то; его честно проверяет только база | **а** (2026-11-21). `memcoord` — `Listener` (перенос `fakeConn` из `stream/hub_test.go`), `Holder`, `Leader`; `Locker` — только `pgcoord`: замок до конца транзакции в памяти потребовал бы подделки транзакций базы и проверял бы подделку; места с этими замками тестируются на тестовой базе, как сейчас. Каждый тест `pgcoord` для `Holder` и `Leader` прогоняется и на `memcoord` — поведение двух реализаций одно |
+| 7 | Где описать | а) ADR-008 «Координация узлов»: что в `coord`, что в базе и почему (outbox), как добавить замок, как подменить реализацию; б) раздел в ADR-005 | а | **а** (2026-11-21). ADR-008 «Coordination of the server instances» в `docs/adr/` сервера, по-английски, как ADR-001–007: таблица замков З1–З10 (класс, имя, вид, кто берёт), что остаётся в базе и почему (лента — outbox, решения 87 и 2), замки в SQL-функциях миграций списком, правила выкатки из решений 3 и 4, как добавить замок, как подменить реализацию (Consul, Redis, NATS, `sp_getapplock`; внешний будильник — после фиксации), лидер и окно «два лидера». ADR-005 и ADR-006 — ссылка на него вместо текста о втором экземпляре |
+
+Задача 1 зависит от решений 1, 3, 4; задача 2 — от 2, 3; задача 3 — от 4; задача 4 — от 6; задача 5 — от 5; задача 6 — от 7.
+
+## Интерфейсы (набросок для задачи 1)
+
+```go
+package coord
+
+// Class is the kind of a lock; the list of classes is the one place they are given, TestClassesUnique checks it.
+type Class int32
+
+const (
+	ClassStream           Class = 2085 // З1, taken by stream.Store itself
+	ClassPriorities       Class = 2185
+	ClassHelpLinks        Class = 2186
+	ClassDutyGroups       Class = 2187
+	ClassWorkflowSettings Class = 2188
+	ClassIntake           Class = 2189
+	ClassBackup           Class = 2190 // решение 3
+	ClassSettingsObject   Class = 2191 // решение 3
+	ClassSearchIndexes    Class = 2192 // решение 4, замок сессии
+	ClassLeader           Class = 2193 // решение 5, замок сессии
+)
+
+// Key is a lock of a class over a name: a customer, or customer:type:id.
+type Key struct {
+	Class Class
+	Name  string
+}
+
+// Locker takes locks held to the end of the transaction of ctx; outside a transaction they are an error.
+type Locker interface {
+	Lock(ctx model.AppContext, key Key) error
+	LockShared(ctx model.AppContext, key Key) error
+	TryLock(ctx model.AppContext, key Key) (bool, error)
+}
+
+// Holder takes a lock of its own session, past any transaction: the build of the search indexes, the leader.
+type Holder interface {
+	// Hold waits for the lock, trying it every poll, and gives the function that lets it go.
+	Hold(ctx context.Context, key Key, poll time.Duration) (release func(), err error)
+}
+
+// Listener hears that a customer may have something new on a channel. A wake is a hint: what happened is in the table.
+type Listener interface {
+	Listen(ctx context.Context, channel string) (Subscription, error)
+}
+
+type Subscription interface {
+	// Next waits for the next customer; an error means the subscription is over and wakes may have been lost.
+	Next(ctx context.Context) (uuid.UUID, error)
+	Close()
+}
+
+// Leader is who of the servers does what only one may (the tick of the scheduler, plan 99).
+type Leader interface {
+	// Lead says whether this server leads now; it tries to become the leader when it does not.
+	Lead(ctx context.Context) (bool, error)
+	Resign()
+}
+```
+
+Набросок, не контракт: имена и сигнатуры уточняет задача 1, менять смысл — только с вопросом.
+
+## Задачи
+
+### Задача 1. Пакет `coord`: ключи и замки транзакции на PostgreSQL
+
+- [ ] **Шаг 1: падающие тесты** `coord/pgcoord/locker_test.go` на тестовой базе: `Lock` двух транзакций на один ключ — вторая ждёт фиксации первой; разные классы с одним именем не мешают; `LockShared` двух — не ждут, `Lock` после `LockShared` — ждёт; `TryLock` на занятом — `false` без ожидания; вне транзакции — ошибка; замок снят откатом.
+- [ ] **Шаг 2:** `coord` — классы, `Key`, `Locker`; `pgcoord.Locker` — `pg_advisory_xact_lock(class, hashtext(name))`, `_shared`, `pg_try_advisory_xact_lock`. Проверка «в транзакции» — как в `AppendStreamEvents`.
+- [ ] **Шаг 3:** `TestClassesUnique` — классы не повторяются; список классов в `coord` — единственное место, где они заданы (страж задачи 6 не даёт написать замок мимо него).
+
+### Задача 2. Перевести замки З2–З8 на `Locker`
+
+- [ ] **Шаг 1:** З2–З6 в `storing`: константы SQL уходят, методы `Lock…` вызывают `Locker` (его держит `Store`). Ключи те же — поведение и замки на живой базе не меняются.
+- [ ] **Шаг 2:** З6 в `reset.go`, `backup/apply.go`, `stand/intake.go`: вместо `conn.SQL(storing.LockIntakeSQL…)` и `StandExec(…LockIntakeSharedSQL…)` — `Locker.Lock` / `LockShared` с `ClassIntake`.
+- [ ] **Шаг 3:** З7 (решение 3): `reset` — `TryLock`, `backup` — `Lock`, оба с `ClassBackup`. Тест: сброс при идущем восстановлении — `ErrBusy`, восстановление при идущем сбросе — ждёт (как сейчас).
+- [ ] **Шаг 4:** З8 (решение 3): `LockSettingsObject` — `Locker.Lock(ClassSettingsObject, customer:type:id)`. Тест журнала настроек на две правки одного объекта — зелёный.
+- [ ] **Шаг 5:** З1 (решение 2а): `lockStreamSQL` берёт класс из `coord.ClassStream` (`fmt` при сборке константы), запрос остаётся одним.
+- [ ] **Шаг 6:** тесты пакетов `storing`, `reset`, `backup`, `stand`, `intake` и `handler/test` по затронутым маршрутам — зелёные, `-race`.
+
+### Задача 3. Сборка индексов на замке сессии (З9)
+
+- [ ] **Шаг 1: падающий тест** `pgcoord/holder_test.go`: два `Hold` одного имени — второй ждёт `release` первого; соединение первого закрыто — второй получает замок; `release`, который не смог снять замок, закрывает соединение (как `unlockSearchIndexes`).
+- [ ] **Шаг 2:** `pgcoord.Holder` — перенос `lockSearchIndexes` / `unlockSearchIndexes` / `discardConn` из `search_indexes.go`: своё соединение из пула, `pg_try_advisory_lock` раз в `poll`, не `pg_advisory_lock` (комментарий о снимке и `CONCURRENTLY` — перенести). Ключ З9 — `Key{ClassSearchIndexes, "search-indexes"}`, в PostgreSQL `pg_try_advisory_lock(2192, hashtext('search-indexes'))` (решение 4).
+- [ ] **Шаг 3:** `search_indexes.go` берёт `Holder`. Тесты индексов (план 96), включая ожидание второго сервера, — зелёные.
+
+### Задача 4. Хаб ленты на `Listener`
+
+- [ ] **Шаг 1:** `pgcoord.Listener` — перенос `connect` (своё соединение мимо пула, `application_name`, `LISTEN <channel>`) и `receive` (`WaitForNotification`, разбор GUID) из `hub.go`. Имя канала — параметр (`im_stream`; план 99 добавит `im_agent_commands`).
+- [ ] **Шаг 2:** `Hub` получает `Listener` вместо `dial`; цикл `listen` с повтором, `wakeAll` после обрыва, `poll` и `trim` не меняются.
+- [ ] **Шаг 3:** `memcoord.Listener` — канал в памяти с ручным «обрывом» для тестов.
+- [ ] **Шаг 4:** тесты хаба (`hub_test.go`) переходят на `memcoord`: уведомление будит подписчика, обрыв — `wakeAll` после переподключения, мусор вместо GUID — `Warn` и дальше. Один тест на `pgcoord` с настоящим `pg_notify` остаётся.
+
+### Задача 5. `Leader` (без подключения)
+
+- [ ] **Шаг 1: падающие тесты** на `pgcoord` и `memcoord`: два `Leader` одного имени — `Lead` истинно ровно у одного; `Resign` или закрытое соединение лидера — второй становится лидером при следующем `Lead`; потеря соединения у лидера — его `Lead` возвращает `false`, а не старое `true`.
+- [ ] **Шаг 2:** `pgcoord.Leader` поверх замка сессии задачи 3 без ожидания (`pg_try_advisory_lock`), с проверкой живости соединения на каждом `Lead` (`SELECT 1` на том же соединении). Ключ — `ClassLeader` (2193) с именем роли (`scheduler`).
+- [ ] **Шаг 3:** планировщик и старт сервера **не трогать**: подключение — задача 4 плана 99. Тест: `NewLeader` без `Lead` не берёт соединение из пула (счётчик открытых соединений не меняется).
+
+### Задача 6. Страж, ADR, прогон
+
+- [ ] **Шаг 1: страж по коду** `TestNoCoordinationSQLOutsideCoord`: в `.go` вне `coord/pgcoord` и `storing/stream_queries.go` нет строк `pg_advisory`, `pg_try_advisory`, `pg_notify`, `LISTEN ` (тесты не в счёт). Как `TestAccessWritesInvalidate` плана 80. Замки в SQL-функциях миграций (З10) страж не видит и не трогает: функция работает внутри базы и при смене СУБД переписывается вместе с миграциями. Они перечислены в ADR-008 отдельным списком; новый такой замок — строкой туда.
+- [ ] **Шаг 2:** ADR-008 «Coordination of the server instances» (решение 7, по-английски): таблица замков с классами, что остаётся в базе и почему (лента — outbox, порядок равен порядку фиксаций, решение 87), что за интерфейсом, как добавить замок, как подменить реализацию (Consul, Redis, NATS, `sp_getapplock`). ADR-005 — ссылка.
+- [ ] **Шаг 3:** полный прогон тестов сервера (пересоздать тестовую базу перед прогоном), `-race`.
+- [ ] **Шаг 4:** сборка на стенд и проверка руками: переход, поток в двух вкладках, сброс МИ, восстановление из копии, правка настроек поста, старт сервера со сборкой индексов. Только потом коммит.
+
+## Объём
+
+| Задача | Оценка | Что меняется |
+|---|---|---|
+| 1. Пакет и замки транзакции | 1–1,5 ч | новый пакет, тесты на базе |
+| 2. Перевод З1–З8 | 1–1,5 ч | 8 файлов, механически |
+| 3. Замок сессии, индексы | 0,5–1 ч | перенос из `search_indexes.go` |
+| 4. Хаб на `Listener` | 1 ч | перенос из `hub.go`, тесты хаба без базы |
+| 5. `Leader` | 0,5–1 ч | новый код, не подключён |
+| 6. Страж, ADR, прогон | 1–1,5 ч | полный прогон ~25 мин, стенд |
+| **Всего** | **~5–7 ч** | поведение не меняется |
+
+Оценка грубая, по темпу прошлых планов. Риск один — задача 2: перепутать вид замка (общий и исключительный, попытка и ожидание) на одном из восьми мест. Страховка — существующие тесты этих мест и тест шага 3 задачи 2.
