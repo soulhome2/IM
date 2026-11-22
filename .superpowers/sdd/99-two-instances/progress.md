@@ -153,3 +153,6 @@ Ruling (с пользователем): (б) — отметка «я жив» о
 Задача 13: доработка 1 — e14570c (statement_timeout сессии лидера = StaleAfter, backend_start, 42P01, ADR +1 запрос); полный handler/test ok 2412 с
 Задача 13: complete (0c1af44..e14570c, review clean; Minor parked: Resign возвращает соединение лидера в пул с statement_timeout 60 с (только при остановке); разные роли базы + pg_signal_backend — решает pid, безопасно по ADR-008)
 Стенд: e14570c один процесс, миграция 084, отметка coord_leaders 2 с, расхождений 0. Документ и итог плана обновлены
+Пользователь: в «Работе сервера» — только число активных узлов (без IM_EXPECTED_NODES, без списка). task-15-brief.md, исполнитель Opus (IM → сервер e14570c → конфигуратор c0b0ca6)
+PUSH 2026-11-23 (по просьбе пользователя): сервер 2ac4bb7..e14570c, конфигуратор c933a87..c0b0ca6 (c29b36d — строка узлов — не запушен: zod требует activeNodes, сервер ещё без поля), IM a6a8dec..4d694b6
+Задача 15: complete (e14570c..d4a3fcb + IM 4d694b6 0021f10 + конф c29b36d, review clean; Minor откат 085 — в ADR-008). Стенд d4a3fcb один процесс: activeNodes 1; проверено 5 → 4 (stop) → 3 (SIGKILL ~30 с)
