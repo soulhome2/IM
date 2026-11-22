@@ -2500,6 +2500,8 @@
       expect(idx && /Индекс поиска \(pg_trgm\)/.test(idx.textContent) && /используется/.test(idx.textContent), "нет строки «Индекс поиска (pg_trgm)» со значением «используется»");
       const mismatches = [...$("adminTable").querySelectorAll("tr")].find((tr) => /^Расхождений копии с базой/.test(tr.cells[0]?.textContent || ""));
       expect(sysStatus.server.liveSliceMismatches === 0 && mismatches && /^0/.test(mismatches.cells[1].textContent), "в «Работе сервера» нет строки «Расхождений копии с базой» со значением 0");
+      const nodes = [...$("adminTable").querySelectorAll("tr")].find((tr) => /^Активных узлов сервера/.test(tr.cells[0]?.textContent || ""));
+      expect(sysStatus.server.activeNodes === 1 && nodes && /^1/.test(nodes.cells[1].textContent), "в «Работе сервера» нет строки «Активных узлов сервера» со значением 1");
       const refresh = $("adminNote").querySelector("[data-admin-refresh]");
       expect(refresh, "нет кнопки «Обновить»");
       await click(refresh);

@@ -194,6 +194,8 @@ window.IM_DICT_UI = {
     "Открыть окна": "Open windows",
     "Расхождений копии с базой": "Copy mismatches with the database",
     "Сервер держит живые инциденты в памяти и раз в минуту сверяет с базой; расхождение перечитывает сам. Счёт с запуска этого экземпляра сервера": "The server keeps live incidents in memory and checks them against the database every minute; it re-reads a mismatch itself. Counted since this server instance started",
+    "Активных узлов сервера": "Active server nodes",
+    "Сколько экземпляров сервера сейчас работают с этой базой. Остановленный или упавший узел перестаёт считаться примерно через 30 секунд.": "How many server instances are working with this database right now. A stopped or crashed node stops being counted after about 30 seconds.",
     "Обновлено": "Updated",
     "Что": "What",
     "События": "Events",

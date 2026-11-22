@@ -3043,7 +3043,8 @@
                     "serverVersion": "1.8.2",
                     "workflowVersion": 4,
                     "maintenanceActive": 1,
-                    "liveSliceMismatches": 0
+                    "liveSliceMismatches": 0,
+                    "activeNodes": 1
                   }
                 }
               }
@@ -13490,7 +13491,8 @@
             "serverVersion": "1.8.2",
             "workflowVersion": 4,
             "maintenanceActive": 1,
-            "liveSliceMismatches": 0
+            "liveSliceMismatches": 0,
+            "activeNodes": 1
           }
         }
       },
@@ -13632,7 +13634,8 @@
           "serverVersion",
           "workflowVersion",
           "maintenanceActive",
-          "liveSliceMismatches"
+          "liveSliceMismatches",
+          "activeNodes"
         ],
         "description": "Работа сервера для своей организации",
         "properties": {
@@ -13669,6 +13672,11 @@
             "type": "integer",
             "minimum": 0,
             "description": "Расхождений копии живых инцидентов в памяти сервера с базой, найденных фоновой сверкой с запуска процесса (§20). Счёт процесса, ответившего на запрос: при нескольких экземплярах сервера у каждого свой. Больше нуля — запись прошла в базу мимо ленты; копия при этом перечитана сама"
+          },
+          "activeNodes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Активных экземпляров сервера (узлов), работающих с этой базой (§20). Узел отмечается в базе раз в 10 с; активный — с отметкой не старше 30 с по часам базы. Обычно не меньше 1; упавший узел перестаёт считаться примерно через 30 с"
           }
         }
       },
