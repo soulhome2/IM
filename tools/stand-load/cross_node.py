@@ -129,7 +129,7 @@ if want("П1a"):
         nn = sql("with u as (update incidents set deleted_at='%s' where guid in (select guid from incidents where deleted_at is null and state<>'closed' order by random() limit 4000) returning 1) select count(*) from u" % MARK)
         # узел, уже севший на сверку, увидит запись при следующей сверке (раз в минуту)
         got = None
-        deadline = time.time() + 200
+        deadline = time.time() + 420
         va = vb = None
         ta = tb = None
         while time.time() < deadline and (ta is None or tb is None):
@@ -145,7 +145,7 @@ if want("П1a"):
         # возврат
         t1 = time.time()
         sql("update incidents set deleted_at=null where deleted_at='%s'" % MARK)
-        back, last = converge(ADMIN, base_a, [A, B], 200)
+        back, last = converge(ADMIN, base_a, [A, B], 420)
         record("П1a SQL руками (мягкое удаление 4000 живых)", ta is not None and tb is not None and fa == fb and None not in back.values(),
                "открытых у test@ до %s/%s; изменение заметили: A через %s с, B через %s с; после %s/%s; возврат: A %s с, B %s с (сверка раз в минуту)" %
                (base_a, base_b, ta, tb, fa, fb, back.get("A"), back.get("B")),

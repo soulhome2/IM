@@ -10,6 +10,7 @@
 Оператор — три потока: цикл действий (паузы 0,5–3 с), heartbeat раз в 15 с, поток SSE.
 Соединения keep-alive, как у браузера. Токен перевыпускается входом раз в 4 мин.
 """
+import uuid
 import http.client, json, os, random, ssl, subprocess, sys, threading, time, urllib.parse, statistics
 
 HOST = "axxonnet.test"
@@ -38,6 +39,7 @@ SORTS = ["priority_then_oldest", "priority_then_newest", "oldest_first", "reacti
 RELOAD = os.environ.get("RELOAD", "none")  # none | every (старый клиент) | throttle (Р-4, bff3e88) | stream (план 84)
 assert RELOAD in ("none", "every", "throttle", "stream"), RELOAD
 OPBASE = int(os.environ.get("OPBASE", "0"))  # план 86: процесс берёт операторов OPBASE+1 … OPBASE+N
+IDEMP = os.environ.get("IDEMP") == "1"  # план 99, этап 2: у каждого перехода свой idempotencyKey (тело запроса)
 NOEMIT = os.environ.get("NOEMIT") == "1"  # план 86: без своего потока событий и гонок — их даёт один процесс
 WORDS = ["стекл", "дым", "вход", "Гардероб", "пожар", "предмет", "СИЗ", "камера"]
 
@@ -235,6 +237,8 @@ def transition(op, inc, tid, form=None, opname=None):
     # и номер последней записи журнала из карточки/строки
     body.update({"expectedState": inc.get("state"), "expectedAddressee": (inc.get("addressee") or {}).get("id") or "",
                  "expectedPriority": inc.get("priority"), "journalSeen": inc.get("journalSeq") or 0})
+    if IDEMP:
+        body["idempotencyKey"] = "p99-%s-%s" % (op.who, uuid.uuid4().hex)
     code, js = op.call("POST", f"/operator/incidents/{inc['guid']}/transitions/{tid}", body,
                        op=opname or "transition:" + tid)
     log({"who": op.who, "op": "outcome", "tid": tid, "inc": inc["guid"], "code": code, "from": inc.get("state"),

@@ -18,7 +18,7 @@ docker exec im-test-db-7 psql -U postgres -c "select pg_terminate_backend(pid) f
 start() {
 	systemd-run --user --collect --quiet --unit="im-test-api-$1" \
 		--setenv="IM_DB_URL=postgresql://postgres:postgres@127.0.0.1:55437/$DB?sslmode=disable" --setenv="IM_SERVER_PORT=$((5011 + $1))" \
-		--setenv=IM_TEST_SUPPORT=true --setenv=IM_CLOUD_URL=http://127.0.0.1:9/stand-cloud-not-used --setenv=IM_S2S_CLOUD_URL=http://127.0.0.1:9/stand-cloud-not-used \
+		--setenv=IM_TEST_SUPPORT=true --setenv=IM_AGENT_DEV_AUTH=${IM_AGENT_DEV_AUTH:-false} --setenv=IM_CLOUD_URL=http://127.0.0.1:9/stand-cloud-not-used --setenv=IM_S2S_CLOUD_URL=http://127.0.0.1:9/stand-cloud-not-used \
 		--setenv=IM_CUSTOMER_GUID=b440ee0d-1ccd-456e-b25f-6ad0c8e398db --setenv=IM_LOG_LEVEL=info --setenv="IM_DB_MAX_CONNS=$([[ $n -gt 1 ]] && echo 10 || echo 16)" \
 		bash -c "exec '$bin' >>'$S/im-test-api-$1.log' 2>&1"
 }
